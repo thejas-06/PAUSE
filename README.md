@@ -1,10 +1,9 @@
 # PAUSE
-**P**ose **A**ware **U**ser **S**tate **E**ngine
+**P**ose **A**ware **U**ser **S**tate **E**ngine — Attention-aware media controller using Head Pose Tracking
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-Face%20Mesh-orange)
-![License](https://img.shields.io/badge/License-MIT-yellow)
 
 > *You look away, it pauses. You look back, it plays.*
 
@@ -14,10 +13,13 @@
 
 ## 🧠 How It Works
 
-PAUSE uses **MediaPipe Face Mesh** to extract 6 facial landmarks, feeds them into OpenCV's **Perspective-n-Point (PnP)** solver to estimate 3D head orientation, and extracts the **Yaw angle** (left/right rotation). When you look away beyond a threshold, it sends a `PlayPause` keystroke to pause your media. When you look back — it resumes.
+PAUSE uses **MediaPipe Face Mesh** (468 landmarks) for two detection systems:
+
+1. **Head Pose Tracking** — Extracts 6 facial landmarks, feeds them into OpenCV's **PnP solver** to estimate 3D head orientation, and extracts **Yaw** (left/right) and **Pitch** (up/down) angles.
+2. **Drowsiness Detection** — Computes the **Eye Aspect Ratio (EAR)** from 6 landmarks per eye. When eyes stay closed beyond a threshold for N consecutive frames, it pauses the video.
 
 ```
-Camera Feed → Face Mesh (468 landmarks) → 6 Key Points → solvePnP → Rotation Matrix → Yaw Angle → Pause/Play
+Camera Feed → Face Mesh (468 landmarks) → Head Pose (PnP) + Eye State (EAR) → Pause/Play
 ```
 
 ### The Math Behind It
@@ -28,7 +30,9 @@ Camera Feed → Face Mesh (468 landmarks) → 6 Key Points → solvePnP → Rota
 4. **Decision Logic:**
    - Yaw **> 15°** (Looking Right) → ⏸️ Pause
    - Yaw **< -15°** (Looking Left) → ⏸️ Pause
-   - Yaw **within ±15°** (Focused) → ▶️ Play
+   - Pitch **> 10°** (Looking Up) → ⏸️ Pause
+   - Pitch **< -10°** (Looking Down) → ⏸️ Pause
+   - Both **within thresholds** (Focused) → ▶️ Play
 
 ### Smart Safeguards
 
@@ -37,6 +41,7 @@ Camera Feed → Face Mesh (468 landmarks) → 6 Key Points → solvePnP → Rota
 | **Stability Buffer** (10 frames) | Prevents accidental pauses from brief glances |
 | **Cooldown Timer** (1 second) | Prevents rapid-fire toggling between pause/play |
 | **Absent Detection** | Pauses when no face is detected at all |
+| **Drowsiness Alert** | Pauses and shows `DROWSY!` when eyes are closed too long |
 
 ---
 
@@ -61,7 +66,7 @@ Camera Feed → Face Mesh (468 landmarks) → 6 Key Points → solvePnP → Rota
 ### Setup
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/PAUSE.git
+git clone https://github.com/thejas-06/PAUSE.git
 cd PAUSE
 
 # Create virtual environment
@@ -77,6 +82,12 @@ pip install -r requirements.txt
 ```bash
 python pause.py
 ```
+
+Customize with CLI flags:
+```bash
+python pause.py --yaw 20 --pitch 15 --camera 0 --stability 12 --cooldown 1.5
+```
+
 Open any media player (YouTube, VLC, Netflix) and let PAUSE handle the rest. Press `Esc` to exit.
 
 ---
@@ -95,16 +106,19 @@ PAUSE/
 
 ## ⚙️ Configuration
 
-These constants can be adjusted at the top of `pause.py`:
+All parameters are configurable via CLI flags:
 
-| Parameter | Default | Description |
+| Flag | Default | Description |
 |---|---|---|
-| `CAM_WIDTH` | 640 | Camera resolution width |
-| `CAM_HEIGHT` | 480 | Camera resolution height |
-| `LOOK_LEFT_THRESHOLD` | -15° | Yaw angle to trigger "Looking Left" |
-| `LOOK_RIGHT_THRESHOLD` | 15° | Yaw angle to trigger "Looking Right" |
-| `STABILITY_FRAMES` | 10 | Consecutive frames before triggering action |
-| `COOLDOWN` | 1.0s | Minimum interval between pause/play toggles |
+| `--camera` | `0` | Camera device index |
+| `--yaw-right` | `14.7` | Yaw threshold for looking right |
+| `--yaw-left` | `15.5` | Yaw threshold for looking left |
+| `--pitch-up` | `12` | Pitch threshold for looking up |
+| `--pitch-down` | `20` | Pitch threshold for looking down |
+| `--stability` | `10` | Consecutive frames before triggering action |
+| `--cooldown` | `1.0` | Minimum seconds between pause/play toggles |
+| `--ear` | `0.22` | Eye Aspect Ratio threshold for blink detection |
+| `--blink-frames` | `15` | Consecutive closed-eye frames for drowsiness |
 
 ---
 
@@ -113,3 +127,4 @@ These constants can be adjusted at the top of `pause.py`:
 - 📺 **Lecture Watching** — Auto-pauses when you look down to take notes
 - 🍳 **Hands-Busy Scenarios** — Controls playback when your hands aren't free
 - 🎧 **Focus Sessions** — Only plays content when you're actively watching
+- 😴 **Drowsiness Safety** — Pauses content when you start dozing off
